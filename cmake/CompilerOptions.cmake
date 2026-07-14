@@ -1,0 +1,5 @@
+function(apply_warnings_as_errors target)
+  if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(${target} PRIVATE -Werror)
+  endif()
+endfunction()

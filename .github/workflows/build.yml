@@ -1,0 +1,13 @@
+name: build
+on: [push, pull_request]
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: configure (release)
+        run: cmake --preset host-release
+      - name: build
+        run: cmake --build build
+      - name: test
+        run: ./build/tinyml_test

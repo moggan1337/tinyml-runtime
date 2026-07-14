@@ -23,12 +23,15 @@ include_directories(${CMAKE_SOURCE_DIR}/src)
 
 add_library(tinyml STATIC
   src/tinyml/version.cpp
+  src/tinyml/model.cpp
 )
 target_link_libraries(tinyml PUBLIC)
 apply_warnings_as_errors(tinyml)
 
 # Minimal test framework — each test_xxx returns 0 on pass, 1 on fail
-add_executable(tinyml_test tests/unit/main.cpp)
+# Glob all test source files
+file(GLOB TINYML_TEST_SOURCES CONFIGURE_DEPENDS "tests/unit/*.cpp")
+add_executable(tinyml_test ${TINYML_TEST_SOURCES})
 target_link_libraries(tinyml_test PRIVATE tinyml)
 apply_warnings_as_errors(tinyml_test)
 include_directories(tinyml_test PRIVATE tests/unit)

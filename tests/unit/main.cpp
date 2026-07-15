@@ -13,6 +13,9 @@
 #include <tinyml/quantize.hpp>
 #include <climits>
 
+// Part 2 tests (kernels)
+extern int part2_main();
+
 // --- test framework ---
 static int g_total = 0;
 static int g_failed = 0;
@@ -145,6 +148,18 @@ static int test_arena_alignment() {
     return 0;
 }
 
+// Forward declarations for tests defined after main()
+static int test_requantize_positive();
+static int test_requantize_saturates_int8_max();
+static int test_requantize_saturates_int8_min();
+static int test_sat_add_int32_no_overflow();
+static int test_sat_add_int32_overflow();
+static int test_sat_mul_int8();
+static int test_quantize_float_to_int8();
+static int test_dequantize_int8_array();
+static int test_relu();
+static int test_relu6();
+
 int main() {
     std::fprintf(stderr, "Running tinyml_test...\n");
     test_version_is_non_empty();
@@ -171,7 +186,8 @@ int main() {
     test_relu6();
     std::fprintf(stderr, "%d/%d tests passed (%d failed)\n",
         g_total - g_failed, g_total, g_failed);
-    return g_failed == 0 ? 0 : 1;
+    int rc = part2_main();
+    return (g_failed == 0 && rc == 0) ? 0 : 1;
 }
 
 static int test_requantize_positive() {

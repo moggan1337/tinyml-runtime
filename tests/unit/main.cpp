@@ -10,6 +10,8 @@
 #include <tinyml/model_types.hpp>
 #include <tinyml/tensor.hpp>
 #include <tinyml/memory_arena.hpp>
+#include <tinyml/quantize.hpp>
+#include <climits>
 
 // --- test framework ---
 static int g_total = 0;
@@ -101,6 +103,18 @@ static int test_tensor_flat_index() {
     return 0;
 }
 
+// Forward declarations for tests defined after main()
+static int test_requantize_positive();
+static int test_requantize_saturates_int8_max();
+static int test_requantize_saturates_int8_min();
+static int test_sat_add_int32_no_overflow();
+static int test_sat_add_int32_overflow();
+static int test_sat_mul_int8();
+static int test_quantize_float_to_int8();
+static int test_dequantize_int8_array();
+static int test_relu();
+static int test_relu6();
+
 // --- arena tests ---
 static int test_arena_alloc_reset() {
     std::array<uint8_t, 256> buf{};
@@ -145,7 +159,91 @@ int main() {
     test_arena_alloc_reset();
     test_arena_fits();
     test_arena_alignment();
+    test_requantize_positive();
+    test_requantize_saturates_int8_max();
+    test_requantize_saturates_int8_min();
+    test_sat_add_int32_no_overflow();
+    test_sat_add_int32_overflow();
+    test_sat_mul_int8();
+    test_quantize_float_to_int8();
+    test_dequantize_int8_array();
+    test_relu();
+    test_relu6();
     std::fprintf(stderr, "%d/%d tests passed (%d failed)\n",
         g_total - g_failed, g_total, g_failed);
     return g_failed == 0 ? 0 : 1;
 }
+
+static int test_requantize_positive() {
+    // 0.0 with scale=0.5, zp=-128: q = round(0/0.5) - 128 = -128
+    int32_t out = tinyml::requantize(0, {0.5f, -128}, tinyml::DType::kInt8);
+    CHECK(out == -128);
+    return 0;
+}
+
+static int test_requantize_saturates_int8_max() {
+    int32_t out = tinyml::requantize(10000, {0.5f, -128}, tinyml::DType::kInt8);
+    CHECK(out == 127);
+    return 0;
+}
+
+static int test_requantize_saturates_int8_min() {
+    int32_t out = tinyml::requantize(-10000, {0.5f, -128}, tinyml::DType::kInt8);
+    CHECK(out == -128);
+    return 0;
+}
+
+static int test_sat_add_int32_no_overflow() {
+    CHECK(tinyml::sat_add<int32_t>(1000, 2000) == 3000);
+    return 0;
+}
+
+static int test_sat_add_int32_overflow() {
+    CHECK(tinyml::sat_add<int32_t>(INT32_MAX, 1) == INT32_MAX);
+    CHECK(tinyml::sat_add<int32_t>(INT32_MIN, -1) == INT32_MIN);
+    return 0;
+}
+
+static int test_sat_mul_int8() {
+    CHECK(tinyml::sat_mul<int8_t>(50, 2) == static_cast<int8_t>(100));
+    CHECK(tinyml::sat_mul<int8_t>(100, 100) == 127); // saturate
+    CHECK(tinyml::sat_mul<int8_t>(-100, 2) == static_cast<int8_t>(-128)); // saturate
+    CHECK(tinyml::sat_mul<int8_t>(-100, -2) == 127); // 200 saturates to 127
+    return 0;
+}
+
+static int test_quantize_float_to_int8() {
+    float input[] = {0.0f, 0.5f, -0.5f, 1.0f, -1.0f};
+    int8_t output[5] = {0};
+    tinyml::quantize_float_array(input, output, 5, 0.01f, -128);
+    CHECK(output[0] == -128);  // 0.0
+    CHECK(output[1] == static_cast<int8_t>(-78));    // 0.5/0.01 - 128 = 50 - 128 = -78
+    // -0.5f / 0.01f rounds to -50; + (-128) = -178 -- but int8 cannot represent -178!
+    // Saturation to int8 should clamp to -128.
+    CHECK(output[2] == static_cast<int8_t>(-128));   // saturated (correct post-saturation result)
+    return 0;
+}
+
+static int test_dequantize_int8_array() {
+    int8_t input[] = {-128, 0, 127};
+    float output[3] = {0};
+    tinyml::dequantize_array(input, output, 3, 0.01f, -128);
+    CHECK(output[0] == 0.0f);
+    CHECK(output[2] == 2.55f);
+    return 0;
+}
+
+static int test_relu() {
+    CHECK(tinyml::relu(-1.0f) == 0.0f);
+    CHECK(tinyml::relu(0.0f)  == 0.0f);
+    CHECK(tinyml::relu(2.0f)  == 2.0f);
+    return 0;
+}
+
+static int test_relu6() {
+    CHECK(tinyml::relu6(-1.0f) == 0.0f);
+    CHECK(tinyml::relu6(3.0f) == 3.0f);
+    CHECK(tinyml::relu6(10.0f) == 6.0f);
+    return 0;
+}
+
